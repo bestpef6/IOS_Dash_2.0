@@ -61,8 +61,11 @@ export default function NewNotificationWidget() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [selectedSource, setSelectedSource] = useState<string>('');
-  const translateX = useSharedValue(0);
   const deleteButtonWidth = 80;
+
+  // Initialize translateX values for both sources
+  const telegramTranslateX = useSharedValue(0);
+  const tradingViewTranslateX = useSharedValue(0);
 
   React.useEffect(() => {
     setNotifications(mockNotifications);
@@ -101,27 +104,19 @@ export default function NewNotificationWidget() {
       setNotifications((prev) =>
         prev.filter((notification) => notification.source !== source)
       );
-      translateX.value = withSpring(0);
+      if (source === 'Telegram') {
+        telegramTranslateX.value = withSpring(0);
+      } else {
+        tradingViewTranslateX.value = withSpring(0);
+      }
     },
-    [translateX]
+    [telegramTranslateX, tradingViewTranslateX]
   );
 
-  const renderSourceSummary = (source: string) => {
-    const sourceNotifications = getSourceNotifications(source);
-    if (sourceNotifications.length === 0) return null;
-
-    const latest = getLatestNotification(source);
-    const uniqueChats =
-      source === 'Telegram'
-        ? new Set(sourceNotifications.map((n) => n.chat_title)).size
-        : null;
-
-    const summaryText =
-      source === 'Telegram'
-        ? `${sourceNotifications.length} new messages from ${uniqueChats} distinct chats`
-        : `${sourceNotifications.length} new alerts`;
-
-    const gesture = Gesture.Pan()
+  const createPanGesture = (source: string) => {
+    const translateX = source === 'Telegram' ? telegramTranslateX : tradingViewTranslateX;
+    
+    return Gesture.Pan()
       .activeOffsetX(-10)
       .onUpdate((event) => {
         const newValue = Math.min(0, Math.max(-deleteButtonWidth, event.translationX));
@@ -135,79 +130,101 @@ export default function NewNotificationWidget() {
           translateX.value = withSpring(0);
         }
       });
+  };
+
+  const renderSourceSummary = (source: string) => {
+    const sourceNotifications = getSourceNotifications(source);
+    const translateX = source === 'Telegram' ? telegramTranslateX : tradingViewTranslateX;
+    const latest = getLatestNotification(source);
+    const uniqueChats =
+      source === 'Telegram'
+        ? new Set(sourceNotifications.map((n) => n.chat_title)).size
+        : null;
+
+    const summaryText =
+      source === 'Telegram'
+        ? `${sourceNotifications.length} new messages from ${uniqueChats} distinct chats`
+        : `${sourceNotifications.length} new alerts`;
 
     const animatedStyle = useAnimatedStyle(() => ({
       transform: [{ translateX: translateX.value }],
+      height: sourceNotifications.length === 0 ? 0 : 100,
+      opacity: sourceNotifications.length === 0 ? 0 : 1,
     }));
+
+    const gesture = createPanGesture(source);
 
     return (
       <Animated.View
         key={source}
-        style={styles.sourceContainer}
+        style={[styles.sourceContainer, animatedStyle]}
         layout={Layout.springify()}
       >
-        <GestureDetector gesture={gesture}>
-          <Animated.View
-            style={[
-              styles.sourceSummary,
-              {
-                backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-              },
-              animatedStyle,
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.summaryContent}
-              onPress={() => {
-                setSelectedSource(source);
-                setIsModalVisible(true);
-              }}
-            >
-              <Image
-                source={
-                  source === 'Telegram'
-                    ? require('@/assets/icons/telegram.png')
-                    : require('@/assets/icons/tradingview.png')
-                }
-                style={styles.sourceIcon}
-              />
-              <View style={styles.summaryTextContainer}>
-                <Text
-                  style={[
-                    styles.sourceName,
-                    { color: isDark ? '#FFFFFF' : '#000000' },
-                  ]}
+        {sourceNotifications.length > 0 && (
+          <>
+            <GestureDetector gesture={gesture}>
+              <Animated.View
+                style={[
+                  styles.sourceSummary,
+                  {
+                    backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  style={styles.summaryContent}
+                  onPress={() => {
+                    setSelectedSource(source);
+                    setIsModalVisible(true);
+                  }}
                 >
-                  {source}
-                </Text>
-                <Text
-                  style={[
-                    styles.summaryText,
-                    { color: isDark ? '#8E8E93' : '#8E8E93' },
-                  ]}
-                >
-                  {summaryText}
-                </Text>
-                <Text
-                  style={[
-                    styles.timestamp,
-                    { color: isDark ? '#8E8E93' : '#8E8E93' },
-                  ]}
-                >
-                  Latest: {formatTimestamp(latest.received_at)}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </Animated.View>
-        </GestureDetector>
-        <View style={styles.deleteButtonContainer}>
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => handleDeleteSource(source)}
-          >
-            <Trash2 color="#FFFFFF" size={24} />
-          </TouchableOpacity>
-        </View>
+                  <Image
+                    source={
+                      source === 'Telegram'
+                        ? require('@/assets/icons/telegram.png')
+                        : require('@/assets/icons/tradingview.png')
+                    }
+                    style={styles.sourceIcon}
+                  />
+                  <View style={styles.summaryTextContainer}>
+                    <Text
+                      style={[
+                        styles.sourceName,
+                        { color: isDark ? '#FFFFFF' : '#000000' },
+                      ]}
+                    >
+                      {source}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.summaryText,
+                        { color: isDark ? '#8E8E93' : '#8E8E93' },
+                      ]}
+                    >
+                      {summaryText}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.timestamp,
+                        { color: isDark ? '#8E8E93' : '#8E8E93' },
+                      ]}
+                    >
+                      Latest: {formatTimestamp(latest.received_at)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
+            </GestureDetector>
+            <View style={styles.deleteButtonContainer}>
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => handleDeleteSource(source)}
+              >
+                <Trash2 color="#FFFFFF" size={24} />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </Animated.View>
     );
   };
@@ -289,7 +306,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   sourceContainer: {
-    height: 100,
     marginBottom: 12,
     position: 'relative',
   },
