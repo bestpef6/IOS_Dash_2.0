@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,10 @@ import Animated, {
   withSpring,
   withTiming,
   runOnJS,
+  FadeIn,
+  Layout,
 } from 'react-native-reanimated';
-import { Trash2 } from 'lucide-react-native';
+import { Trash2, Bell } from 'lucide-react-native';
 import NotificationDetailsModal from './NotificationDetailsModal';
 
 // Mock data for development
@@ -62,8 +64,7 @@ export default function NewNotificationWidget() {
   const translateX = useSharedValue(0);
   const deleteButtonWidth = 80;
 
-  useEffect(() => {
-    // In production, this would fetch from the API
+  React.useEffect(() => {
     setNotifications(mockNotifications);
   }, []);
 
@@ -97,7 +98,6 @@ export default function NewNotificationWidget() {
 
   const handleDeleteSource = useCallback(
     (source: string) => {
-      console.log(`Deleting notifications for ${source}`);
       setNotifications((prev) =>
         prev.filter((notification) => notification.source !== source)
       );
@@ -105,25 +105,6 @@ export default function NewNotificationWidget() {
     },
     [translateX]
   );
-
-  const gesture = Gesture.Pan()
-    .activeOffsetX(-10)
-    .onUpdate((event) => {
-      const newValue = Math.min(0, Math.max(-deleteButtonWidth, event.translationX));
-      translateX.value = newValue;
-    })
-    .onEnd(() => {
-      const shouldDelete = translateX.value < -deleteButtonWidth / 2;
-      if (shouldDelete) {
-        runOnJS(handleDeleteSource)(selectedSource);
-      } else {
-        translateX.value = withSpring(0);
-      }
-    });
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
 
   const renderSourceSummary = (source: string) => {
     const sourceNotifications = getSourceNotifications(source);
@@ -140,8 +121,31 @@ export default function NewNotificationWidget() {
         ? `${sourceNotifications.length} new messages from ${uniqueChats} distinct chats`
         : `${sourceNotifications.length} new alerts`;
 
+    const gesture = Gesture.Pan()
+      .activeOffsetX(-10)
+      .onUpdate((event) => {
+        const newValue = Math.min(0, Math.max(-deleteButtonWidth, event.translationX));
+        translateX.value = newValue;
+      })
+      .onEnd(() => {
+        const shouldDelete = translateX.value < -deleteButtonWidth / 2;
+        if (shouldDelete) {
+          runOnJS(handleDeleteSource)(source);
+        } else {
+          translateX.value = withSpring(0);
+        }
+      });
+
+    const animatedStyle = useAnimatedStyle(() => ({
+      transform: [{ translateX: translateX.value }],
+    }));
+
     return (
-      <View key={source} style={styles.sourceContainer}>
+      <Animated.View
+        key={source}
+        style={styles.sourceContainer}
+        layout={Layout.springify()}
+      >
         <GestureDetector gesture={gesture}>
           <Animated.View
             style={[
@@ -198,64 +202,104 @@ export default function NewNotificationWidget() {
         </GestureDetector>
         <View style={styles.deleteButtonContainer}>
           <TouchableOpacity
-            style={[styles.deleteButton]}
+            style={styles.deleteButton}
             onPress={() => handleDeleteSource(source)}
           >
             <Trash2 color="#FFFFFF" size={24} />
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
     );
   };
 
-  if (notifications.length === 0) {
-    return (
-      <View
-        style={[
-          styles.container,
-          { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' },
-        ]}
-      >
-        <Text
-          style={[
-            styles.emptyText,
-            { color: isDark ? '#8E8E93' : '#8E8E93' },
-          ]}
-        >
-          No notifications yet
-        </Text>
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.container}>
-      {renderSourceSummary('Telegram')}
-      {renderSourceSummary('TradingView')}
+    <Animated.View
+      entering={FadeIn.duration(300)}
+      style={[
+        styles.container,
+        { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' },
+      ]}
+    >
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <Bell size={24} color={isDark ? '#FFFFFF' : '#000000'} />
+          <Text
+            style={[
+              styles.headerTitle,
+              { color: isDark ? '#FFFFFF' : '#000000' },
+            ]}
+          >
+            Notifications
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.notificationsContainer}>
+        {notifications.length === 0 ? (
+          <Text
+            style={[
+              styles.emptyText,
+              { color: isDark ? '#8E8E93' : '#8E8E93' },
+            ]}
+          >
+            No notifications yet
+          </Text>
+        ) : (
+          <>
+            {renderSourceSummary('Telegram')}
+            {renderSourceSummary('TradingView')}
+          </>
+        )}
+      </View>
+
       <NotificationDetailsModal
         isVisible={isModalVisible}
         onClose={() => setIsModalVisible(false)}
         source={selectedSource}
         notifications={getSourceNotifications(selectedSource)}
       />
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  header: {
     paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2C2C2E',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  notificationsContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
   sourceContainer: {
+    height: 100,
     marginBottom: 12,
     position: 'relative',
-    height: 100,
   },
   sourceSummary: {
     borderRadius: 12,
     overflow: 'hidden',
     height: '100%',
+    position: 'absolute',
+    left: 0,
+    right: 0,
   },
   summaryContent: {
     flexDirection: 'row',
